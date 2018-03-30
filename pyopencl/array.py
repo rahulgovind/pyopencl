@@ -35,12 +35,12 @@ import pyopencl.elementwise as elementwise
 import pyopencl as cl
 from pytools import memoize_method
 from pyopencl.compyte.array import (
-        as_strided as _as_strided,
-        f_contiguous_strides as _f_contiguous_strides,
-        c_contiguous_strides as _c_contiguous_strides,
-        equal_strides as _equal_strides,
-        ArrayFlags as _ArrayFlags,
-        get_common_dtype as _get_common_dtype_base)
+    as_strided as _as_strided,
+    f_contiguous_strides as _f_contiguous_strides,
+    c_contiguous_strides as _c_contiguous_strides,
+    equal_strides as _equal_strides,
+    ArrayFlags as _ArrayFlags,
+    get_common_dtype as _get_common_dtype_base)
 from pyopencl.characterize import has_double_support
 from pyopencl import cltypes
 
@@ -83,7 +83,7 @@ vec = VecLookupWarner()
 # {{{ helper functionality
 
 
-def splay(queue, n, kernel_specific_max_wg_size=None):
+def splay(queue, n, kernel_specific_max_wg_size=None, fixed_work_items=None):
     dev = queue.device
     max_work_items = _builtin_min(128, dev.max_work_group_size)
 
@@ -107,12 +107,15 @@ def splay(queue, n, kernel_specific_max_wg_size=None):
         group_count = max_groups
         grp = (n + min_work_items - 1) // min_work_items
         work_items_per_group = (
-                (grp + max_groups - 1) // max_groups) * min_work_items
+            (grp + max_groups - 1) // max_groups) * min_work_items
     else:
         group_count = max_groups
         work_items_per_group = max_work_items
 
-    #print "n:%d gc:%d wipg:%d" % (n, group_count, work_items_per_group)
+    if fixed_work_items is not None:
+        work_items_per_group = fixed_work_items
+        group_count = (n + work_items_per_group - 1) // work_items_per_group
+    # print "n:%d gc:%d wipg:%d" % (n, group_count, work_items_per_group)
     return (group_count*work_items_per_group,), (work_items_per_group,)
 
 
@@ -137,9 +140,9 @@ def elwise_kernel_runner(kernel_getter):
         knl = kernel_getter(*args, **kwargs)
 
         gs, ls = repr_ary.get_sizes(queue,
-                knl.get_work_group_info(
-                    cl.kernel_work_group_info.WORK_GROUP_SIZE,
-                    queue.device))
+                                    knl.get_work_group_info(
+                                        cl.kernel_work_group_info.WORK_GROUP_SIZE,
+                                        queue.device))
 
         assert isinstance(repr_ary, Array)
 
@@ -148,7 +151,7 @@ def elwise_kernel_runner(kernel_getter):
             if isinstance(arg, Array):
                 if not arg.flags.forc:
                     raise RuntimeError("only contiguous arrays may "
-                            "be used as arguments to this operation")
+                                       "be used as arguments to this operation")
                 actual_args.append(arg.base_data)
                 actual_args.append(arg.offset)
                 wait_for.extend(arg.events)
@@ -170,9 +173,9 @@ class DefaultAllocator(cl.tools.DeferredAllocator):
     def __init__(self, *args, **kwargs):
         from warnings import warn
         warn("pyopencl.array.DefaultAllocator is deprecated. "
-                "It will be continue to exist throughout the 2013.x "
-                "versions of PyOpenCL.",
-                DeprecationWarning, 2)
+             "It will be continue to exist throughout the 2013.x "
+             "versions of PyOpenCL.",
+             DeprecationWarning, 2)
         cl.tools.DeferredAllocator.__init__(self, *args, **kwargs)
 
 
@@ -195,8 +198,8 @@ class ArrayHasOffsetError(ValueError):
     """
 
     def __init__(self, val="The operation you are attempting does not yet "
-                "support arrays that start at an offset from the beginning "
-                "of their buffer."):
+                 "support arrays that start at an offset from the beginning "
+                 "of their buffer."):
         ValueError.__init__(self, val)
 
 
@@ -388,7 +391,7 @@ class Array(object):
     __array_priority__ = 100
 
     def __init__(self, cq, shape, dtype, order="C", allocator=None,
-            data=None, offset=0, strides=None, events=None):
+                 data=None, offset=0, strides=None, events=None):
         # {{{ backward compatibility
 
         if isinstance(cq, cl.CommandQueue):
@@ -401,7 +404,7 @@ class Array(object):
 
         else:
             raise TypeError("cq may be a queue or a context, not '%s'"
-                    % type(cq))
+                            % type(cq))
 
         if allocator is not None:
             # "is" would be wrong because two Python objects are allowed
@@ -441,7 +444,7 @@ class Array(object):
 
             if not isinstance(shape, admissible_types):
                 raise TypeError("shape must either be iterable or "
-                        "castable to an integer")
+                                "castable to an integer")
             s = shape
             shape = (shape,)
 
@@ -461,7 +464,8 @@ class Array(object):
         # }}}
 
         if _dtype_is_object(dtype):
-            raise TypeError("object arrays on the compute device are not allowed")
+            raise TypeError(
+                "object arrays on the compute device are not allowed")
 
         assert isinstance(shape, tuple)
         assert isinstance(strides, tuple)
@@ -488,14 +492,14 @@ class Array(object):
 
                 else:
                     raise ValueError("cannot allocate CL buffer with "
-                            "negative size")
+                                     "negative size")
 
             if allocator is None:
                 if context is None and queue is not None:
                     context = queue.context
 
                 self.base_data = cl.Buffer(
-                        context, cl.mem_flags.READ_WRITE, alloc_nbytes)
+                    context, cl.mem_flags.READ_WRITE, alloc_nbytes)
             else:
                 self.base_data = self.allocator(alloc_nbytes)
         else:
@@ -521,7 +525,7 @@ class Array(object):
         return _ArrayFlags(self)
 
     def _new_with_changes(self, data, offset, shape=None, dtype=None,
-            strides=None, queue=_copy_queue, allocator=None):
+                          strides=None, queue=_copy_queue, allocator=None):
         """
         :arg data: *None* means allocate a new array.
         """
@@ -547,12 +551,12 @@ class Array(object):
 
         if queue is not None:
             return Array(queue, shape, dtype, allocator=allocator,
-                    strides=strides, data=data, offset=offset,
-                    events=events)
+                         strides=strides, data=data, offset=offset,
+                         events=events)
         else:
             return Array(self.context, shape, dtype,
-                    strides=strides, data=data, offset=offset,
-                    events=events, allocator=allocator)
+                         strides=strides, data=data, offset=offset,
+                         events=events, allocator=allocator)
 
     def with_queue(self, queue):
         """Return a copy of *self* with the default queue set to *queue*.
@@ -566,14 +570,14 @@ class Array(object):
             assert queue.context == self.context
 
         return self._new_with_changes(self.base_data, self.offset,
-                queue=queue)
+                                      queue=queue)
 
     #@memoize_method FIXME: reenable
     def get_sizes(self, queue, kernel_specific_max_wg_size=None):
         if not self.flags.forc:
             raise NotImplementedError("cannot operate on non-contiguous array")
         return splay(queue, self.size,
-                kernel_specific_max_wg_size=kernel_specific_max_wg_size)
+                     kernel_specific_max_wg_size=kernel_specific_max_wg_size)
 
     def set(self, ary, queue=None, async_=None, **kwargs):
         """Transfer the contents the :class:`numpy.ndarray` object *ary*
@@ -603,7 +607,7 @@ class Array(object):
 
         if kwargs:
             raise TypeError("extra keyword arguments specified: %s"
-                    % ", ".join(kwargs))
+                            % ", ".join(kwargs))
 
         # }}}
 
@@ -616,14 +620,14 @@ class Array(object):
         if not _equal_strides(ary.strides, self.strides, self.shape):
             from warnings import warn
             warn("Setting array from one with different "
-                    "strides/storage order. This will cease to work "
-                    "in 2013.x.",
-                    stacklevel=2)
+                 "strides/storage order. This will cease to work "
+                 "in 2013.x.",
+                 stacklevel=2)
 
         if self.size:
             cl.enqueue_copy(queue or self.queue, self.base_data, ary,
-                    device_offset=self.offset,
-                    is_blocking=not async_)
+                            device_offset=self.offset,
+                            is_blocking=not async_)
 
     def get(self, queue=None, ary=None, async_=None, **kwargs):
         """Transfer the contents of *self* into *ary* or a newly allocated
@@ -655,7 +659,7 @@ class Array(object):
 
         if kwargs:
             raise TypeError("extra keyword arguments specified: %s"
-                    % ", ".join(kwargs))
+                            % ", ".join(kwargs))
 
         # }}}
 
@@ -672,15 +676,15 @@ class Array(object):
             if self.shape != ary.shape:
                 from warnings import warn
                 warn("get() between arrays of different shape is deprecated "
-                        "and will be removed in PyCUDA 2017.x",
-                        DeprecationWarning, stacklevel=2)
+                     "and will be removed in PyCUDA 2017.x",
+                     DeprecationWarning, stacklevel=2)
 
         assert self.flags.forc, "Array in get() must be contiguous"
 
         if self.size:
             cl.enqueue_copy(queue or self.queue, ary, self.base_data,
-                    device_offset=self.offset,
-                    is_blocking=not async_)
+                            device_offset=self.offset,
+                            is_blocking=not async_)
 
         return ary
 
@@ -706,8 +710,8 @@ class Array(object):
 
         if self.nbytes:
             cl.enqueue_copy(queue or self.queue,
-                    result.base_data, self.base_data,
-                    src_offset=self.offset, byte_count=self.nbytes)
+                            result.base_data, self.base_data,
+                            src_offset=self.offset, byte_count=self.nbytes)
 
         return result
 
@@ -734,7 +738,7 @@ class Array(object):
         assert out.shape == b.shape
 
         return elementwise.get_axpbyz_kernel(
-                out.context, a.dtype, b.dtype, out.dtype)
+            out.context, a.dtype, b.dtype, out.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -744,7 +748,7 @@ class Array(object):
         b = np.array(b)
         assert out.shape == x.shape
         return elementwise.get_axpbz_kernel(out.context,
-                a.dtype, x.dtype, b.dtype, out.dtype)
+                                            a.dtype, x.dtype, b.dtype, out.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -752,7 +756,7 @@ class Array(object):
         assert out.shape == a.shape
         assert out.shape == b.shape
         return elementwise.get_multiply_kernel(
-                a.context, a.dtype, b.dtype, out.dtype)
+            a.context, a.dtype, b.dtype, out.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -760,7 +764,7 @@ class Array(object):
         other = np.array(other)
         assert out.shape == ary.shape
         return elementwise.get_rdivide_elwise_kernel(
-                out.context, ary.dtype, other.dtype, out.dtype)
+            out.context, ary.dtype, other.dtype, out.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -770,7 +774,7 @@ class Array(object):
         assert self.shape == other.shape
 
         return elementwise.get_divide_kernel(self.context,
-                self.dtype, other.dtype, out.dtype)
+                                             self.dtype, other.dtype, out.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -791,7 +795,7 @@ class Array(object):
             raise TypeError("unsupported dtype in _abs()")
 
         return elementwise.get_unary_func_kernel(
-                arg.context, fname, arg.dtype, out_dtype=result.dtype)
+            arg.context, fname, arg.dtype, out_dtype=result.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -799,7 +803,7 @@ class Array(object):
         from pyopencl.elementwise import complex_dtype_to_name
         fname = "%s_real" % complex_dtype_to_name(arg.dtype)
         return elementwise.get_unary_func_kernel(
-                arg.context, fname, arg.dtype, out_dtype=result.dtype)
+            arg.context, fname, arg.dtype, out_dtype=result.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -807,7 +811,7 @@ class Array(object):
         from pyopencl.elementwise import complex_dtype_to_name
         fname = "%s_imag" % complex_dtype_to_name(arg.dtype)
         return elementwise.get_unary_func_kernel(
-                arg.context, fname, arg.dtype, out_dtype=result.dtype)
+            arg.context, fname, arg.dtype, out_dtype=result.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -815,30 +819,30 @@ class Array(object):
         from pyopencl.elementwise import complex_dtype_to_name
         fname = "%s_conj" % complex_dtype_to_name(arg.dtype)
         return elementwise.get_unary_func_kernel(
-                arg.context, fname, arg.dtype, out_dtype=result.dtype)
+            arg.context, fname, arg.dtype, out_dtype=result.dtype)
 
     @staticmethod
     @elwise_kernel_runner
     def _pow_scalar(result, ary, exponent):
         exponent = np.array(exponent)
         return elementwise.get_pow_kernel(result.context,
-                ary.dtype, exponent.dtype, result.dtype,
-                is_base_array=True, is_exp_array=False)
+                                          ary.dtype, exponent.dtype, result.dtype,
+                                          is_base_array=True, is_exp_array=False)
 
     @staticmethod
     @elwise_kernel_runner
     def _rpow_scalar(result, base, exponent):
         base = np.array(base)
         return elementwise.get_pow_kernel(result.context,
-                base.dtype, exponent.dtype, result.dtype,
-                is_base_array=False, is_exp_array=True)
+                                          base.dtype, exponent.dtype, result.dtype,
+                                          is_base_array=False, is_exp_array=True)
 
     @staticmethod
     @elwise_kernel_runner
     def _pow_array(result, base, exponent):
         return elementwise.get_pow_kernel(
-                result.context, base.dtype, exponent.dtype, result.dtype,
-                is_base_array=True, is_exp_array=True)
+            result.context, base.dtype, exponent.dtype, result.dtype,
+            is_base_array=True, is_exp_array=True)
 
     @staticmethod
     @elwise_kernel_runner
@@ -849,7 +853,7 @@ class Array(object):
     @elwise_kernel_runner
     def _copy(dest, src):
         return elementwise.get_copy_kernel(
-                dest.context, dest.dtype, src.dtype)
+            dest.context, dest.dtype, src.dtype)
 
     def _new_like_me(self, dtype=None, queue=None):
         strides = None
@@ -862,17 +866,17 @@ class Array(object):
         queue = queue or self.queue
         if queue is not None:
             return self.__class__(queue, self.shape, dtype,
-                    allocator=self.allocator, strides=strides)
+                                  allocator=self.allocator, strides=strides)
         else:
             return self.__class__(self.context, self.shape, dtype,
-                    strides=strides, allocator=self.allocator)
+                                  strides=strides, allocator=self.allocator)
 
     @staticmethod
     @elwise_kernel_runner
     def _scalar_binop(out, a, b, queue=None, op=None):
         return elementwise.get_array_scalar_binop_kernel(
-                out.context, op, out.dtype, a.dtype,
-                np.array(b).dtype)
+            out.context, op, out.dtype, a.dtype,
+            np.array(b).dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -880,7 +884,7 @@ class Array(object):
         if a.shape != b.shape:
             raise ValueError("shapes of binop arguments do not match")
         return elementwise.get_array_binop_kernel(
-                out.context, op, out.dtype, a.dtype, b.dtype)
+            out.context, op, out.dtype, a.dtype, b.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -888,7 +892,7 @@ class Array(object):
         if out.shape != a.shape:
             raise ValueError("shapes of arguments do not match")
         return elementwise.get_unop_kernel(
-                out.context, op, a.dtype, out.dtype)
+            out.context, op, a.dtype, out.dtype)
 
     # }}}
 
@@ -898,9 +902,9 @@ class Array(object):
         """Return `selffac * self + otherfac*other`.
         """
         result = self._new_like_me(
-                _get_common_dtype(self, other, queue or self.queue))
+            _get_common_dtype(self, other, queue or self.queue))
         result.add_event(
-                self._axpbyz(result, selffac, self, otherfac, other))
+            self._axpbyz(result, selffac, self, otherfac, other))
         return result
 
     def __add__(self, other):
@@ -909,12 +913,12 @@ class Array(object):
         if isinstance(other, Array):
             # add another vector
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
 
             result.add_event(
-                    self._axpbyz(result,
-                        self.dtype.type(1), self,
-                        other.dtype.type(1), other))
+                self._axpbyz(result,
+                             self.dtype.type(1), self,
+                             other.dtype.type(1), other))
 
             return result
         else:
@@ -925,8 +929,8 @@ class Array(object):
                 common_dtype = _get_common_dtype(self, other, self.queue)
                 result = self._new_like_me(common_dtype)
                 result.add_event(
-                        self._axpbz(result, self.dtype.type(1),
-                            self, common_dtype.type(other)))
+                    self._axpbz(result, self.dtype.type(1),
+                                self, common_dtype.type(other)))
                 return result
 
     __radd__ = __add__
@@ -936,11 +940,11 @@ class Array(object):
 
         if isinstance(other, Array):
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(
-                    self._axpbyz(result,
-                        self.dtype.type(1), self,
-                        other.dtype.type(-1), other))
+                self._axpbyz(result,
+                             self.dtype.type(1), self,
+                             other.dtype.type(-1), other))
 
             return result
         else:
@@ -949,9 +953,9 @@ class Array(object):
                 return self.copy()
             else:
                 result = self._new_like_me(
-                        _get_common_dtype(self, other, self.queue))
+                    _get_common_dtype(self, other, self.queue))
                 result.add_event(
-                        self._axpbz(result, self.dtype.type(1), self, -other))
+                    self._axpbz(result, self.dtype.type(1), self, -other))
                 return result
 
     def __rsub__(self, other):
@@ -963,27 +967,27 @@ class Array(object):
         # other must be a scalar
         result = self._new_like_me(common_dtype)
         result.add_event(
-                self._axpbz(result, self.dtype.type(-1), self,
-                    common_dtype.type(other)))
+            self._axpbz(result, self.dtype.type(-1), self,
+                        common_dtype.type(other)))
         return result
 
     def __iadd__(self, other):
         if isinstance(other, Array):
             self.add_event(
-                    self._axpbyz(self,
-                        self.dtype.type(1), self,
-                        other.dtype.type(1), other))
+                self._axpbyz(self,
+                             self.dtype.type(1), self,
+                             other.dtype.type(1), other))
             return self
         else:
             self.add_event(
-                    self._axpbz(self, self.dtype.type(1), self, other))
+                self._axpbz(self, self.dtype.type(1), self, other))
             return self
 
     def __isub__(self, other):
         if isinstance(other, Array):
             self.add_event(
-                    self._axpbyz(self, self.dtype.type(1), self,
-                        other.dtype.type(-1), other))
+                self._axpbyz(self, self.dtype.type(1), self,
+                             other.dtype.type(-1), other))
             return self
         else:
             self._axpbz(self, self.dtype.type(1), self, -other)
@@ -997,34 +1001,34 @@ class Array(object):
     def __mul__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(
-                    self._elwise_multiply(result, self, other))
+                self._elwise_multiply(result, self, other))
             return result
         else:
             common_dtype = _get_common_dtype(self, other, self.queue)
             result = self._new_like_me(common_dtype)
             result.add_event(
-                    self._axpbz(result,
-                        common_dtype.type(other), self, self.dtype.type(0)))
+                self._axpbz(result,
+                            common_dtype.type(other), self, self.dtype.type(0)))
             return result
 
     def __rmul__(self, scalar):
         common_dtype = _get_common_dtype(self, scalar, self.queue)
         result = self._new_like_me(common_dtype)
         result.add_event(
-                self._axpbz(result,
-                    common_dtype.type(scalar), self, self.dtype.type(0)))
+            self._axpbz(result,
+                        common_dtype.type(scalar), self, self.dtype.type(0)))
         return result
 
     def __imul__(self, other):
         if isinstance(other, Array):
             self.add_event(
-                    self._elwise_multiply(self, self, other))
+                self._elwise_multiply(self, self, other))
         else:
             # scalar
             self.add_event(
-                    self._axpbz(self, other, self, self.dtype.type(0)))
+                self._axpbz(self, other, self, self.dtype.type(0)))
 
         return self
 
@@ -1033,7 +1037,7 @@ class Array(object):
         """
         if isinstance(other, Array):
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(self._div(result, self, other))
         else:
             if other == 1:
@@ -1043,8 +1047,8 @@ class Array(object):
                 common_dtype = _get_common_dtype(self, other, self.queue)
                 result = self._new_like_me(common_dtype)
                 result.add_event(
-                        self._axpbz(result,
-                            common_dtype.type(1/other), self, self.dtype.type(0)))
+                    self._axpbz(result,
+                                common_dtype.type(1/other), self, self.dtype.type(0)))
 
         return result
 
@@ -1056,14 +1060,14 @@ class Array(object):
 
         if isinstance(other, Array):
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(other._div(result, self))
         else:
             # create a new array for the result
             common_dtype = _get_common_dtype(self, other, self.queue)
             result = self._new_like_me(common_dtype)
             result.add_event(
-                    self._rdiv_scalar(result, self, common_dtype.type(other)))
+                self._rdiv_scalar(result, self, common_dtype.type(other)))
 
         return result
 
@@ -1082,7 +1086,7 @@ class Array(object):
             # create a new array for the result
             result = self._new_like_me(common_dtype)
             result.add_event(
-                    self._scalar_binop(result, self, other, op="&"))
+                self._scalar_binop(result, self, other, op="&"))
 
         return result
 
@@ -1101,7 +1105,7 @@ class Array(object):
             # create a new array for the result
             result = self._new_like_me(common_dtype)
             result.add_event(
-                    self._scalar_binop(result, self, other, op="|"))
+                self._scalar_binop(result, self, other, op="|"))
 
         return result
 
@@ -1120,7 +1124,7 @@ class Array(object):
             # create a new array for the result
             result = self._new_like_me(common_dtype)
             result.add_event(
-                    self._scalar_binop(result, self, other, op="^"))
+                self._scalar_binop(result, self, other, op="^"))
 
         return result
 
@@ -1136,7 +1140,7 @@ class Array(object):
             self.add_event(self._array_binop(self, self, other, op="&"))
         else:
             self.add_event(
-                    self._scalar_binop(self, self, other, op="&"))
+                self._scalar_binop(self, self, other, op="&"))
 
         return self
 
@@ -1150,7 +1154,7 @@ class Array(object):
             self.add_event(self._array_binop(self, self, other, op="|"))
         else:
             self.add_event(
-                    self._scalar_binop(self, self, other, op="|"))
+                self._scalar_binop(self, self, other, op="|"))
 
         return self
 
@@ -1164,7 +1168,7 @@ class Array(object):
             self.add_event(self._array_binop(self, self, other, op="^"))
         else:
             self.add_event(
-                    self._scalar_binop(self, self, other, op="^"))
+                self._scalar_binop(self, self, other, op="^"))
 
         return self
 
@@ -1176,8 +1180,8 @@ class Array(object):
                 and cl.get_cl_header_version() >= (1, 2)):
 
             self.add_event(
-                    cl.enqueue_fill_buffer(queue, self.base_data, np.int8(0),
-                        self.offset, self.nbytes, wait_for=wait_for))
+                cl.enqueue_fill_buffer(queue, self.base_data, np.int8(0),
+                                       self.offset, self.nbytes, wait_for=wait_for))
         else:
             zero = np.zeros((), self.dtype)
             self.fill(zero, queue=queue)
@@ -1189,7 +1193,7 @@ class Array(object):
         """
 
         self.add_event(
-                self._fill(self, value, queue=queue, wait_for=wait_for))
+            self._fill(self, value, queue=queue, wait_for=wait_for))
 
         return self
 
@@ -1218,12 +1222,12 @@ class Array(object):
             assert self.shape == other.shape
 
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(
-                    self._pow_array(result, self, other))
+                self._pow_array(result, self, other))
         else:
             result = self._new_like_me(
-                    _get_common_dtype(self, other, self.queue))
+                _get_common_dtype(self, other, self.queue))
             result.add_event(self._pow_scalar(result, self, other))
 
         return result
@@ -1233,7 +1237,7 @@ class Array(object):
         common_dtype = _get_common_dtype(self, other, self.queue)
         result = self._new_like_me(common_dtype)
         result.add_event(
-                self._rpow_scalar(result, common_dtype.type(other), self))
+            self._rpow_scalar(result, common_dtype.type(other), self))
         return result
 
     def __invert__(self):
@@ -1254,7 +1258,7 @@ class Array(object):
 
         result = self._new_like_me()
         result.add_event(
-                self._reverse(result, self))
+            self._reverse(result, self))
         return result
 
     def astype(self, dtype, queue=None):
@@ -1273,7 +1277,7 @@ class Array(object):
             return bool(self.get())
         else:
             raise ValueError("The truth value of an array with "
-                    "more than one element is ambiguous. Use a.any() or a.all()")
+                             "more than one element is ambiguous. Use a.any() or a.all()")
 
     __bool__ = __nonzero__
 
@@ -1291,7 +1295,7 @@ class Array(object):
     @elwise_kernel_runner
     def _scalar_comparison(out, a, b, queue=None, op=None):
         return elementwise.get_array_scalar_comparison_kernel(
-                out.context, op, a.dtype)
+            out.context, op, a.dtype)
 
     @staticmethod
     @elwise_kernel_runner
@@ -1299,37 +1303,37 @@ class Array(object):
         if a.shape != b.shape:
             raise ValueError("shapes of comparison arguments do not match")
         return elementwise.get_array_comparison_kernel(
-                out.context, op, a.dtype, b.dtype)
+            out.context, op, a.dtype, b.dtype)
 
     def __eq__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op="=="))
+                self._array_comparison(result, self, other, op="=="))
             return result
         else:
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._scalar_comparison(result, self, other, op="=="))
+                self._scalar_comparison(result, self, other, op="=="))
             return result
 
     def __ne__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op="!="))
+                self._array_comparison(result, self, other, op="!="))
             return result
         else:
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._scalar_comparison(result, self, other, op="!="))
+                self._scalar_comparison(result, self, other, op="!="))
             return result
 
     def __le__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op="<="))
+                self._array_comparison(result, self, other, op="<="))
             return result
         else:
             result = self._new_like_me(np.int8)
@@ -1340,36 +1344,36 @@ class Array(object):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op=">="))
+                self._array_comparison(result, self, other, op=">="))
             return result
         else:
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._scalar_comparison(result, self, other, op=">="))
+                self._scalar_comparison(result, self, other, op=">="))
             return result
 
     def __lt__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op="<"))
+                self._array_comparison(result, self, other, op="<"))
             return result
         else:
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._scalar_comparison(result, self, other, op="<"))
+                self._scalar_comparison(result, self, other, op="<"))
             return result
 
     def __gt__(self, other):
         if isinstance(other, Array):
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._array_comparison(result, self, other, op=">"))
+                self._array_comparison(result, self, other, op=">"))
             return result
         else:
             result = self._new_like_me(np.int8)
             result.add_event(
-                    self._scalar_comparison(result, self, other, op=">"))
+                self._scalar_comparison(result, self, other, op=">"))
             return result
 
     # }}}
@@ -1380,7 +1384,7 @@ class Array(object):
         if self.dtype.kind == "c":
             result = self._new_like_me(self.dtype.type(0).real.dtype)
             result.add_event(
-                    self._real(result, self))
+                self._real(result, self))
             return result
         else:
             return self
@@ -1390,7 +1394,7 @@ class Array(object):
         if self.dtype.kind == "c":
             result = self._new_like_me(self.dtype.type(0).real.dtype)
             result.add_event(
-                    self._imag(result, self))
+                self._imag(result, self))
             return result
         else:
             return zeros_like(self)
@@ -1440,7 +1444,7 @@ class Array(object):
         order = kwargs.pop("order", "C")
         if kwargs:
             raise TypeError("unexpected keyword arguments: %s"
-                    % list(kwargs.keys()))
+                            % list(kwargs.keys()))
 
         if order not in "CF":
             raise ValueError("order must be either 'C' or 'F'")
@@ -1468,8 +1472,8 @@ class Array(object):
 
         if shape == self.shape:
             return self._new_with_changes(
-                    data=self.base_data, offset=self.offset, shape=shape,
-                    strides=self.strides)
+                data=self.base_data, offset=self.offset, shape=shape,
+                strides=self.strides)
 
         import operator
         size = reduce(operator.mul, shape, 1)
@@ -1559,8 +1563,8 @@ class Array(object):
         # }}}
 
         return self._new_with_changes(
-                data=self.base_data, offset=self.offset, shape=shape,
-                strides=tuple(newstrides))
+            data=self.base_data, offset=self.offset, shape=shape,
+            strides=tuple(newstrides))
 
     def ravel(self):
         """Returns flattened array containing the same data."""
@@ -1579,25 +1583,25 @@ class Array(object):
 
         from pytools import argmin2
         min_stride_axis = argmin2(
-                (axis, abs(stride))
-                for axis, stride in enumerate(self.strides))
+            (axis, abs(stride))
+            for axis, stride in enumerate(self.strides))
 
         if self.shape[min_stride_axis] * old_itemsize % itemsize != 0:
             raise ValueError("new type not compatible with array")
 
         new_shape = (
-                self.shape[:min_stride_axis]
-                + (self.shape[min_stride_axis] * old_itemsize // itemsize,)
-                + self.shape[min_stride_axis+1:])
+            self.shape[:min_stride_axis]
+            + (self.shape[min_stride_axis] * old_itemsize // itemsize,)
+            + self.shape[min_stride_axis+1:])
         new_strides = (
-                self.strides[:min_stride_axis]
-                + (self.strides[min_stride_axis] * itemsize // old_itemsize,)
-                + self.strides[min_stride_axis+1:])
+            self.strides[:min_stride_axis]
+            + (self.strides[min_stride_axis] * itemsize // old_itemsize,)
+            + self.strides[min_stride_axis+1:])
 
         return self._new_with_changes(
-                self.base_data, self.offset,
-                shape=new_shape, dtype=dtype,
-                strides=new_strides)
+            self.base_data, self.offset,
+            shape=new_shape, dtype=dtype,
+            strides=new_strides)
 
     def squeeze(self):
         """Returns a view of the array with dimensions of
@@ -1607,11 +1611,11 @@ class Array(object):
         """
         new_shape = tuple([dim for dim in self.shape if dim > 1])
         new_strides = tuple([self.strides[i]
-            for i, dim in enumerate(self.shape) if dim > 1])
+                             for i, dim in enumerate(self.shape) if dim > 1])
 
         return self._new_with_changes(
-                self.base_data, self.offset,
-                shape=new_shape, strides=new_strides)
+            self.base_data, self.offset,
+            shape=new_shape, strides=new_strides)
 
     def transpose(self, axes=None):
         """Permute the dimensions of an array.
@@ -1635,9 +1639,9 @@ class Array(object):
         new_strides = [self.strides[axes[i]] for i in range(len(axes))]
 
         return self._new_with_changes(
-                self.base_data, self.offset,
-                shape=tuple(new_shape),
-                strides=tuple(new_strides))
+            self.base_data, self.offset,
+            shape=tuple(new_shape),
+            strides=tuple(new_strides))
 
     @property
     def T(self):  # noqa
@@ -1668,9 +1672,9 @@ class Array(object):
             flags = cl.map_flags.READ | cl.map_flags.WRITE
 
         ary, evt = cl.enqueue_map_buffer(
-                queue or self.queue, self.base_data, flags, self.offset,
-                self.shape, self.dtype, strides=self.strides, wait_for=wait_for,
-                is_blocking=is_blocking)
+            queue or self.queue, self.base_data, flags, self.offset,
+            self.shape, self.dtype, strides=self.strides, wait_for=wait_for,
+            is_blocking=is_blocking)
 
         if is_blocking:
             return ary
@@ -1687,13 +1691,13 @@ class Array(object):
         if isinstance(index, Array):
             if index.dtype.kind != "i":
                 raise TypeError(
-                        "fancy indexing is only allowed with integers")
+                    "fancy indexing is only allowed with integers")
             if len(index.shape) != 1:
                 raise NotImplementedError(
-                        "multidimensional fancy indexing is not supported")
+                    "multidimensional fancy indexing is not supported")
             if len(self.shape) != 1:
                 raise NotImplementedError(
-                        "fancy indexing into a multi-d array is not supported")
+                    "fancy indexing into a multi-d array is not supported")
 
             return take(self, index)
 
@@ -1716,7 +1720,7 @@ class Array(object):
 
             if isinstance(index_entry, slice):
                 start, stop, idx_stride = index_entry.indices(
-                        self.shape[array_axis])
+                    self.shape[array_axis])
 
                 array_stride = self.strides[array_axis]
 
@@ -1734,7 +1738,7 @@ class Array(object):
 
                 if not (0 <= index_entry < array_shape):
                     raise IndexError(
-                            "subindex in axis %d out of range" % index_axis)
+                        "subindex in axis %d out of range" % index_axis)
 
                 new_offset += self.strides[array_axis]*index_entry
 
@@ -1755,7 +1759,7 @@ class Array(object):
 
                 if seen_ellipsis:
                     raise IndexError(
-                            "more than one ellipsis not allowed in index")
+                        "more than one ellipsis not allowed in index")
                 seen_ellipsis = True
 
             elif index_entry is np.newaxis:
@@ -1773,9 +1777,9 @@ class Array(object):
             array_axis += 1
 
         return self._new_with_changes(
-                self.base_data, offset=new_offset,
-                shape=tuple(new_shape),
-                strides=tuple(new_strides))
+            self.base_data, offset=new_offset,
+            shape=tuple(new_shape),
+            strides=tuple(new_strides))
 
     def setitem(self, subscript, value, queue=None, wait_for=None):
         """Like :meth:`__setitem__`, but with the ability to specify
@@ -1793,16 +1797,16 @@ class Array(object):
         if isinstance(subscript, Array):
             if subscript.dtype.kind != "i":
                 raise TypeError(
-                        "fancy indexing is only allowed with integers")
+                    "fancy indexing is only allowed with integers")
             if len(subscript.shape) != 1:
                 raise NotImplementedError(
-                        "multidimensional fancy indexing is not supported")
+                    "multidimensional fancy indexing is not supported")
             if len(self.shape) != 1:
                 raise NotImplementedError(
-                        "fancy indexing into a multi-d array is not supported")
+                    "fancy indexing into a multi-d array is not supported")
 
             multi_put([value], subscript, out=[self], queue=queue,
-                    wait_for=wait_for)
+                      wait_for=wait_for)
             return
 
         subarray = self[subscript]
@@ -1810,8 +1814,8 @@ class Array(object):
         if isinstance(value, np.ndarray):
             if subarray.shape == value.shape and subarray.strides == value.strides:
                 self.add_event(
-                        cl.enqueue_copy(queue, subarray.base_data,
-                            value, device_offset=subarray.offset, wait_for=wait_for))
+                    cl.enqueue_copy(queue, subarray.base_data,
+                                    value, device_offset=subarray.offset, wait_for=wait_for))
                 return
             else:
                 value = to_device(queue, value, self.allocator)
@@ -1819,16 +1823,16 @@ class Array(object):
         if isinstance(value, Array):
             if len(subarray.shape) != len(value.shape):
                 raise NotImplementedError("broadcasting is not "
-                        "supported in __setitem__")
+                                          "supported in __setitem__")
             if subarray.shape != value.shape:
                 raise ValueError("cannot assign between arrays of "
-                        "differing shapes")
+                                 "differing shapes")
             if subarray.strides != value.strides:
                 raise ValueError("cannot assign between arrays of "
-                        "differing strides")
+                                 "differing strides")
 
             self.add_event(
-                    self._copy(subarray, value, queue=queue, wait_for=wait_for))
+                self._copy(subarray, value, queue=queue, wait_for=wait_for))
 
         else:
             # Let's assume it's a scalar
@@ -1871,7 +1875,7 @@ def as_strided(ary, shape=None, strides=None):
         strides = ary.strides
 
     return Array(ary.queue, shape, ary.dtype, allocator=ary.allocator,
-            data=ary.data, strides=strides)
+                 data=ary.data, strides=strides)
 
 
 class _same_as_transfer(object):  # noqa
@@ -1879,7 +1883,7 @@ class _same_as_transfer(object):  # noqa
 
 
 def to_device(queue, ary, allocator=None, async_=None,
-        array_queue=_same_as_transfer, **kwargs):
+              array_queue=_same_as_transfer, **kwargs):
     """Return a :class:`Array` that is an exact copy of the
     :class:`numpy.ndarray` instance *ary*.
 
@@ -1914,7 +1918,7 @@ def to_device(queue, ary, allocator=None, async_=None,
 
     if kwargs:
         raise TypeError("extra keyword arguments specified: %s"
-                % ", ".join(kwargs))
+                        % ", ".join(kwargs))
 
     # }}}
 
@@ -1927,7 +1931,7 @@ def to_device(queue, ary, allocator=None, async_=None,
         first_arg = queue.context
 
     result = Array(first_arg, ary.shape, ary.dtype,
-                    allocator=allocator, strides=ary.strides)
+                   allocator=allocator, strides=ary.strides)
     result.set(ary, async_=async_, queue=queue)
     return result
 
@@ -1944,7 +1948,7 @@ def zeros(queue, shape, dtype, order="C", allocator=None):
     """
 
     result = Array(queue, shape, dtype,
-            order=order, allocator=allocator)
+                   order=order, allocator=allocator)
     result._zero_fill()
     return result
 
@@ -1955,7 +1959,7 @@ def empty_like(ary, queue=_copy_queue, allocator=None):
     """
 
     return ary._new_with_changes(data=None, offset=0, queue=queue,
-            allocator=allocator)
+                                 allocator=allocator)
 
 
 def zeros_like(ary):
@@ -1971,7 +1975,7 @@ def zeros_like(ary):
 @elwise_kernel_runner
 def _arange_knl(result, start, step):
     return elementwise.get_arange_kernel(
-            result.context, result.dtype)
+        result.context, result.dtype)
 
 
 def arange(queue, *args, **kwargs):
@@ -2039,7 +2043,7 @@ def arange(queue, *args, **kwargs):
                     explicit_dtype = True
             else:
                 raise ValueError(
-                        "may not specify '%s' by position and keyword" % k)
+                    "may not specify '%s' by position and keyword" % k)
         else:
             raise ValueError("unexpected keyword argument '%s'" % k)
 
@@ -2065,7 +2069,7 @@ def arange(queue, *args, **kwargs):
 
     result = Array(queue, (size,), dtype, allocator=inf.allocator)
     result.add_event(
-            _arange_knl(result, start, step, queue=queue, wait_for=wait_for))
+        _arange_knl(result, start, step, queue=queue, wait_for=wait_for))
     return result
 
 # }}}
@@ -2076,7 +2080,7 @@ def arange(queue, *args, **kwargs):
 @elwise_kernel_runner
 def _take(result, ary, indices):
     return elementwise.get_take_kernel(
-            result.context, result.dtype, indices.dtype)
+        result.context, result.dtype, indices.dtype)
 
 
 def take(a, indices, out=None, queue=None, wait_for=None):
@@ -2090,7 +2094,7 @@ def take(a, indices, out=None, queue=None, wait_for=None):
 
     assert len(indices.shape) == 1
     out.add_event(
-            _take(out, a, indices, queue=queue, wait_for=wait_for))
+        _take(out, a, indices, queue=queue, wait_for=wait_for))
     return out
 
 
@@ -2110,8 +2114,8 @@ def multi_take(arrays, indices, out=None, queue=None):
 
     if out is None:
         out = [Array(context, queue, indices.shape, a_dtype,
-            allocator=a_allocator)
-                for i in range(vec_count)]
+                     allocator=a_allocator)
+               for i in range(vec_count)]
     else:
         if len(out) != len(arrays):
             raise ValueError("out and arrays must have the same length")
@@ -2120,8 +2124,8 @@ def multi_take(arrays, indices, out=None, queue=None):
 
     def make_func_for_chunk_size(chunk_size):
         knl = elementwise.get_take_kernel(
-                indices.context, a_dtype, indices.dtype,
-                vec_count=chunk_size)
+            indices.context, a_dtype, indices.dtype,
+            vec_count=chunk_size)
         knl.set_block_shape(*indices._block)
         return knl
 
@@ -2134,21 +2138,21 @@ def multi_take(arrays, indices, out=None, queue=None):
             knl = make_func_for_chunk_size(vec_count-start_i)
 
         gs, ls = indices.get_sizes(queue,
-                knl.get_work_group_info(
-                    cl.kernel_work_group_info.WORK_GROUP_SIZE,
-                    queue.device))
+                                   knl.get_work_group_info(
+                                       cl.kernel_work_group_info.WORK_GROUP_SIZE,
+                                       queue.device))
 
         knl(queue, gs, ls,
-                indices.data,
-                *([o.data for o in out[chunk_slice]]
-                    + [i.data for i in arrays[chunk_slice]]
-                    + [indices.size]))
+            indices.data,
+            *([o.data for o in out[chunk_slice]]
+              + [i.data for i in arrays[chunk_slice]]
+              + [indices.size]))
 
     return out
 
 
 def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
-        out=None, queue=None, src_offsets=None):
+                   out=None, queue=None, src_offsets=None):
     if not len(arrays):
         return []
 
@@ -2162,7 +2166,7 @@ def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
 
     if out is None:
         out = [Array(queue, dest_shape, a_dtype, allocator=a_allocator)
-                for i in range(vec_count)]
+               for i in range(vec_count)]
     else:
         if a_dtype != single_valued(o.dtype for o in out):
             raise TypeError("arrays and out must have the same dtype")
@@ -2171,14 +2175,14 @@ def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
 
     if src_indices.dtype != dest_indices.dtype:
         raise TypeError(
-                "src_indices and dest_indices must have the same dtype")
+            "src_indices and dest_indices must have the same dtype")
 
     if len(src_indices.shape) != 1:
         raise ValueError("src_indices must be 1D")
 
     if src_indices.shape != dest_indices.shape:
         raise ValueError(
-                "src_indices and dest_indices must have the same shape")
+            "src_indices and dest_indices must have the same shape")
 
     if src_offsets is None:
         src_offsets_list = []
@@ -2186,7 +2190,7 @@ def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
         src_offsets_list = src_offsets
         if len(src_offsets) != vec_count:
             raise ValueError(
-                    "src_indices and src_offsets must have the same length")
+                "src_indices and src_offsets must have the same length")
 
     max_chunk_size = 10
 
@@ -2194,9 +2198,9 @@ def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
 
     def make_func_for_chunk_size(chunk_size):
         return elementwise.get_take_put_kernel(context,
-                a_dtype, src_indices.dtype,
-                with_offsets=src_offsets is not None,
-                vec_count=chunk_size)
+                                               a_dtype, src_indices.dtype,
+                                               with_offsets=src_offsets is not None,
+                                               vec_count=chunk_size)
 
     knl = make_func_for_chunk_size(chunk_size)
 
@@ -2207,28 +2211,28 @@ def multi_take_put(arrays, dest_indices, src_indices, dest_shape=None,
             knl = make_func_for_chunk_size(vec_count-start_i)
 
         gs, ls = src_indices.get_sizes(queue,
-                knl.get_work_group_info(
-                    cl.kernel_work_group_info.WORK_GROUP_SIZE,
-                    queue.device))
+                                       knl.get_work_group_info(
+                                           cl.kernel_work_group_info.WORK_GROUP_SIZE,
+                                           queue.device))
 
         from pytools import flatten
         knl(queue, gs, ls,
-                *([o.data for o in out[chunk_slice]]
-                    + [dest_indices.base_data,
-                        dest_indices.offset,
-                        src_indices.base_data,
-                        src_indices.offset]
-                    + list(flatten(
-                        (i.base_data, i.offset)
-                        for i in arrays[chunk_slice]))
-                    + src_offsets_list[chunk_slice]
-                    + [src_indices.size]))
+            *([o.data for o in out[chunk_slice]]
+              + [dest_indices.base_data,
+                 dest_indices.offset,
+                 src_indices.base_data,
+                 src_indices.offset]
+              + list(flatten(
+                  (i.base_data, i.offset)
+                  for i in arrays[chunk_slice]))
+              + src_offsets_list[chunk_slice]
+              + [src_indices.size]))
 
     return out
 
 
 def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
-        wait_for=None):
+              wait_for=None):
     if not len(arrays):
         return []
 
@@ -2242,8 +2246,8 @@ def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
 
     if out is None:
         out = [Array(queue, dest_shape, a_dtype,
-            allocator=a_allocator, queue=queue)
-            for i in range(vec_count)]
+                     allocator=a_allocator, queue=queue)
+               for i in range(vec_count)]
     else:
         if a_dtype != single_valued(o.dtype for o in out):
             raise TypeError("arrays and out must have the same dtype")
@@ -2262,8 +2266,8 @@ def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
 
     def make_func_for_chunk_size(chunk_size):
         knl = elementwise.get_put_kernel(
-                context, a_dtype, dest_indices.dtype,
-                vec_count=chunk_size)
+            context, a_dtype, dest_indices.dtype,
+            vec_count=chunk_size)
         return knl
 
     knl = make_func_for_chunk_size(chunk_size)
@@ -2283,24 +2287,24 @@ def multi_put(arrays, dest_indices, dest_shape=None, out=None, queue=None,
             knl = make_func_for_chunk_size(vec_count-start_i)
 
         gs, ls = dest_indices.get_sizes(queue,
-                knl.get_work_group_info(
-                    cl.kernel_work_group_info.WORK_GROUP_SIZE,
-                    queue.device))
+                                        knl.get_work_group_info(
+                                            cl.kernel_work_group_info.WORK_GROUP_SIZE,
+                                            queue.device))
 
         from pytools import flatten
         evt = knl(queue, gs, ls,
-                *(
-                    list(flatten(
-                        (o.base_data, o.offset)
-                        for o in out[chunk_slice]))
-                    + [dest_indices.base_data, dest_indices.offset]
-                    + list(flatten(
-                        (i.base_data, i.offset)
-                        for i in arrays[chunk_slice]))
-                    + [use_fill_cla.base_data, use_fill_cla.offset]
-                    + [array_lengths_cla.base_data, array_lengths_cla.offset]
-                    + [dest_indices.size]),
-                **dict(wait_for=wait_for))
+                  *(
+                      list(flatten(
+                          (o.base_data, o.offset)
+                          for o in out[chunk_slice]))
+                      + [dest_indices.base_data, dest_indices.offset]
+                      + list(flatten(
+                          (i.base_data, i.offset)
+                          for i in arrays[chunk_slice]))
+                      + [use_fill_cla.base_data, use_fill_cla.offset]
+                      + [array_lengths_cla.base_data, array_lengths_cla.offset]
+                      + [dest_indices.size]),
+                  **dict(wait_for=wait_for))
 
         # FIXME should wait on incoming events
 
@@ -2328,14 +2332,14 @@ def concatenate(arrays, axis=0, queue=None, allocator=None):
         else:
             if len(ary.shape) != len(shape):
                 raise ValueError("%d'th array has different number of axes "
-                        "(shold have %d, has %d)"
-                        % (i_ary, len(ary.shape), len(shape)))
+                                 "(shold have %d, has %d)"
+                                 % (i_ary, len(ary.shape), len(shape)))
 
             ary_shape_list = list(ary.shape)
             if (ary_shape_list[:axis] != shape[:axis]
                     or ary_shape_list[axis+1:] != shape[axis+1:]):
                 raise ValueError("%d'th array has residual not matching "
-                        "other arrays" % i_ary)
+                                 "other arrays" % i_ary)
 
             shape[axis] += ary.shape[axis]
 
@@ -2351,10 +2355,10 @@ def concatenate(arrays, axis=0, queue=None, allocator=None):
     for ary in arrays:
         my_len = ary.shape[axis]
         result.setitem(
-                full_slice[:axis]
-                + (slice(base_idx, base_idx+my_len),)
-                + full_slice[axis+1:],
-                ary)
+            full_slice[:axis]
+            + (slice(base_idx, base_idx+my_len),)
+            + full_slice[axis+1:],
+            ary)
 
         base_idx += my_len
 
@@ -2445,7 +2449,7 @@ def reshape(a, shape):
 @elwise_kernel_runner
 def _if_positive(result, criterion, then_, else_):
     return elementwise.get_if_positive_kernel(
-            result.context, criterion.dtype, then_.dtype)
+        result.context, criterion.dtype, then_.dtype)
 
 
 def if_positive(criterion, then_, else_, out=None, queue=None):
@@ -2470,14 +2474,14 @@ def maximum(a, b, out=None, queue=None):
 
     # silly, but functional
     return if_positive(a.mul_add(1, b, -1, queue=queue), a, b,
-            queue=queue, out=out)
+                       queue=queue, out=out)
 
 
 def minimum(a, b, out=None, queue=None):
     """Return the elementwise minimum of *a* and *b*."""
     # silly, but functional
     return if_positive(a.mul_add(1, b, -1, queue=queue), b, a,
-            queue=queue, out=out)
+                       queue=queue, out=out)
 
 # }}}
 
@@ -2513,7 +2517,7 @@ def vdot(a, b, dtype=None, queue=None, slice=None):
     """
     from pyopencl.reduction import get_dot_kernel
     krnl = get_dot_kernel(a.context, dtype, a.dtype, b.dtype,
-            conjugate_first=True)
+                          conjugate_first=True)
     return krnl(a, b, queue=queue, slice=slice)
 
 
@@ -2523,7 +2527,7 @@ def subset_dot(subset, a, b, dtype=None, queue=None, slice=None):
     """
     from pyopencl.reduction import get_subset_dot_kernel
     krnl = get_subset_dot_kernel(
-            a.context, dtype, subset.dtype, a.dtype, b.dtype)
+        a.context, dtype, subset.dtype, a.dtype, b.dtype)
     return krnl(subset, a, b, queue=queue, slice=slice)
 
 
@@ -2567,9 +2571,8 @@ subset_max.__doc__ = """.. versionadded:: 2011.1"""
 # {{{ scans
 
 def cumsum(a, output_dtype=None, queue=None,
-        wait_for=None, return_event=False):
+           wait_for=None, return_event=False):
     # undocumented for now
-
     """
     .. versionadded:: 2013.1
     """
